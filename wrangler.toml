@@ -1,0 +1,20 @@
+# Cloudflare Pages configuration.
+# If you deploy via Git in the Cloudflare dashboard, this file becomes the
+# source of truth for bindings: fill in database_id below, or delete the
+# [[d1_databases]] section and bind DB in the dashboard instead.
+# (Dashboard: Pages > your project > Settings > Functions > D1 database bindings)
+name = "fo"
+pages_build_output_dir = "."
+compatibility_date = "2025-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fo-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+# Replace database_id with the real id from: wrangler d1 create fo-db
+# Secrets are NOT in this file. Set them in the dashboard:
+# Pages > Settings > Environment variables (Production):
+#   MAIL_DOMAIN, RESEND_DOMAIN, RESEND_API_KEY, SESSION_SECRET,
+#   INVITE_CODE (optional), AI_API_BASE, AI_API_KEY, AI_MODEL,
+#   TELEGRAM_BOT_TOKEN (optional), RESEND_WEBHOOK_SECRET (optional),
+#   WOAIL_VERIFY_URL, WOAIL_SECRET (optional, SSO only)

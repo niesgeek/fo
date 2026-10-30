@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>邮箱</title>
+<style>body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#EDF3FA;color:#123A5C;margin:0}
+header{display:flex;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid #ccc;flex-wrap:wrap}
+main{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 60px)}
+aside{border-right:1px solid #ccc;padding:12px}
+aside button{display:block;width:100%;margin:4px 0;padding:8px;text-align:left;background:#fff;border:1px solid #ccc;cursor:pointer}
+#list{padding:12px;overflow:auto}
+.item{border-bottom:1px solid #ddd;padding:10px;cursor:pointer}
+.item.unread{font-weight:700}
+#detail{padding:12px;border-top:1px solid #ccc;white-space:pre-wrap}
+input,textarea,select{width:100%;padding:8px;margin:4px 0;box-sizing:border-box}
+button{padding:8px 12px;cursor:pointer}
+#compose{display:none;border:1px solid #ccc;padding:12px;margin:12px}
+@media(max-width:700px){main{grid-template-columns:1fr}}
+</style></head>
+<body>
+<header>
+<strong id="who">邮箱</strong>
+<input id="q" placeholder="搜索主题 / 发件人 / 正文" style="max-width:260px">
+<button id="searchBtn">搜索</button>
+<button id="syncBtn">同步</button>
+<button id="composeBtn">写信</button>
+<button id="logoutBtn">退出</button>
+</header>
+<main>
+<aside>
+<button data-folder="inbox">收件箱</button>
+<button data-folder="sent">已发送</button>
+<button data-folder="starred">星标</button>
+<button data-folder="archived">归档</button>
+<button data-folder="spam">垃圾</button>
+<button data-folder="trash">回收站</button>
+<hr>
+<label>发件别名</label>
+<input id="aliasInput" placeholder="例如 support@你的域名">
+<button id="aliasBtn">添加别名</button>
+<div id="aliasList"></div>
+<hr>
+<label>Telegram chat id（新邮件提醒）</label>
+<input id="tgInput">
+<button id="tgBtn">保存并测试</button>
+<p><a href="login.html">账号</a> · <a href="index.html">首页</a> · <a href="DEPLOY.md">部署说明</a></p>
+</aside>
+<div>
+<div id="compose">
+<h3>写信</h3>
+<label>发件人<select id="fromSel"></select></label>
+<label>收件人<input id="toInput"></label>
+<label>主题<input id="subjInput"></label>
+<label>正文<textarea id="bodyInput" rows="8"></textarea></label>
+<button id="sendBtn">发送</button>
+<button id="cancelCompose">取消</button>
+<p id="sendMsg"></p>
+</div>
+<div id="list"></div>
+<div id="detail"></div>
+</div>
+</main>
+<script>
+let folder='inbox', current=null;
+async function api(p, body, method){
+  const r = await fetch(p, {method: method||(body?'POST':'GET'), headers:{'Content-Type':'application/json'}, body: body?JSON.stringify(body):undefined});
+  return r.json();
+}
+function esc(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+async function load(){
+  const d = await api('/api/mail/inbox?folder='+folder);
+  if(!d.ok){ if(d.error && d.error.includes('未登录')) location.href='login.html'; document.getElementById('list').textContent=d.error; return; }
+  const me = await api('/api/me');
+  if(me.ok) document.getElementById('who').textContent = me.user.email;
+  const fromSel=document.getElementById('fromSel'); fromSel.innerHTML='';
+  (d.addresses||[]).forEach(a=>{const o=document.createElement('option'); o.value=a; o.textContent=a; fromSel.appendChild(o)});
+  document.getElementById('list').innerHTML = (d.messages||[]).map(m=>`<div class="item ${m.read?'':'unread'}" data-id="${m.id}"><div>${m.starred?'★ ':''}${esc(m.subject||'(无主题)')}</div><div>${esc(m.from_addr)} · ${new Date(m.received_at).toLocaleString()}</div><div>${esc(m.snippet||'')}</div></div>`).join('') || '<p>空</p>';
+  document.querySelectorAll('.item').forEach(el=>el.onclick=()=>openMsg(el.dataset.id));
+  loadAliases();
+}
+async function loadAliases(){
+  const d=await api('/api/mail/aliases');
+  document.getElementById('aliasList').innerHTML=(d.aliases||[]).map(a=>`<div>${esc(a.alias_email)} <button data-del="${a.id}">删</button></div>`).join('');
+  document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{await api('/api/mail/aliases',{action:'delete',id:b.dataset.del}); loadAliases();});
+}
+async function openMsg(id){
+  const d=await api('/api/mail/message?id='+encodeURIComponent(id));
+  if(!d.ok) return;
+  current=d.message;
+  document.getElementById('detail').innerHTML =
+    `<h3>${esc(d.message.subject)}</h3><p>发件人：${esc(d.message.from_addr)}<br>收件人：${esc((d.message.to||[]).join(', '))}</p>`+
+    `<div>${esc(d.message.text_body||'')}</div>`+
+    (d.message.html_body?`<iframe style="width:100%;height:300px;border:1px solid #ccc" srcdoc="${esc(d.message.html_body)}"></iframe>`:'')+
+    `<p>${(d.message.attachments||[]).map(a=>`<a href="/api/mail/attachment?id=${id}&aid=${a.id}">${esc(a.filename)}</a>`).join(' ')}</p>`+
+    `<p><button id="starBtn">星标切换</button> <button id="readBtn">已读切换</button> <button id="archBtn">归档</button> <button id="spamBtn">垃圾</button> <button id="trashBtn">删除</button> <button id="replyBtn">回复</button></p>`;
+  document.getElementById('starBtn').onclick=()=>state('star', !d.message.starred);
+  document.getElementById('readBtn').onclick=()=>state('read', !d.message.read);
+  document.getElementById('archBtn').onclick=()=>state('hide', true);
+  document.getElementById('spamBtn').onclick=()=>state('spam', true);
+  document.getElementById('trashBtn').onclick=()=>state('delete', true);
+  document.getElementById('replyBtn').onclick=()=>{document.getElementById('compose').style.display='block'; document.getElementById('toInput').value=d.message.from_addr; document.getElementById('subjInput').value='Re: '+(d.message.subject||''); document.getElementById('bodyInput').value='\n\n--- 原邮件 ---\n'+(d.message.text_body||'');};
+}
+async function state(field, on){ if(!current) return; await api('/api/mail/state',{id:current.id,field,on}); load(); }
+document.querySelectorAll('[data-folder]').forEach(b=>b.onclick=()=>{folder=b.dataset.folder; load();});
+document.getElementById('searchBtn').onclick=async()=>{
+  const d=await api('/api/mail/search?q='+encodeURIComponent(document.getElementById('q').value));
+  document.getElementById('list').innerHTML=(d.messages||[]).map(m=>`<div class="item" data-id="${m.id}">${esc(m.subject||'')} · ${esc(m.from_addr)}</div>`).join('');
+  document.querySelectorAll('.item').forEach(el=>el.onclick=()=>openMsg(el.dataset.id));
+};
+document.getElementById('syncBtn').onclick=async()=>{const d=await api('/api/mail/sync?batch=3'); alert(d.ok?('同步完成，新拉取 '+d.synced+' 封'):('同步失败：'+d.error)); load();};
+document.getElementById('composeBtn').onclick=()=>document.getElementById('compose').style.display='block';
+document.getElementById('cancelCompose').onclick=()=>document.getElementById('compose').style.display='none';
+document.getElementById('sendBtn').onclick=async()=>{
+  const d=await api('/api/mail/send',{from:document.getElementById('fromSel').value,to:document.getElementById('toInput').value,subject:document.getElementById('subjInput').value,text:document.getElementById('bodyInput').value});
+  document.getElementById('sendMsg').textContent=d.ok?'发送成功':'发送失败：'+d.error;
+  if(d.ok) load();
+};
+document.getElementById('aliasBtn').onclick=async()=>{const d=await api('/api/mail/aliases',{alias:document.getElementById('aliasInput').value}); if(!d.ok) alert(d.error); loadAliases();};
+document.getElementById('tgBtn').onclick=async()=>{const d=await api('/api/mail/notify',{telegram_chat_id:document.getElementById('tgInput').value,enabled:true}); if(!d.ok){alert(d.error);return;} const t=await api('/api/mail/notify',{action:'test',tg_chat:document.getElementById('tgInput').value}); alert(t.ok?'测试已发送':'测试失败：'+t.error);};
+document.getElementById('logoutBtn').onclick=async()=>{await api('/api/logout',{}); location.href='login.html';};
+load();
+</script></body></html>

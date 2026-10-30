@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>登录 · 注册</title>
+<style>body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#EEF2F6;color:#1C3247;max-width:480px;margin:60px auto;padding:0 20px;line-height:1.7}
+input,button{width:100%;padding:10px;margin:6px 0;font-size:15px;box-sizing:border-box}
+button{background:#1C3247;color:#fff;border:0;cursor:pointer}
+.msg{color:#9E5240;min-height:1.5em}.ok{color:#2F6DA3}
+a{color:#2F6DA3}</style></head>
+<body>
+<h1>登录 · 注册</h1>
+<p id="domain"></p>
+<label>账号名<input id="username" autocomplete="username"></label>
+<label>密码<input id="password" type="password" autocomplete="current-password"></label>
+<label id="inviteRow" style="display:none">邀请码<input id="invite"></label>
+<button id="loginBtn">登录</button>
+<button id="regBtn" style="background:#fff;color:#1C3247;border:1px solid #1C3247">注册</button>
+<p class="msg" id="msg"></p>
+<p><a href="mail.html">进入邮箱</a> · <a href="index.html">返回首页</a></p>
+<script>
+async function api(p, body){
+  const r = await fetch(p, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body||{})});
+  return r.json();
+}
+(async()=>{
+  const info = await fetch('/api/signup-info').then(r=>r.json()).catch(()=>null);
+  if(info && info.domain) document.getElementById('domain').textContent = '邮箱域名：' + info.domain + (info.require_invite ? '（注册需要邀请码）' : '');
+  if(info && info.require_invite) document.getElementById('inviteRow').style.display='block';
+})();
+function say(t, ok){ const m=document.getElementById('msg'); m.textContent=t; m.className = ok ? 'msg ok' : 'msg'; }
+document.getElementById('loginBtn').onclick = async ()=>{
+  const d = await api('/api/login', {username: username.value, password: password.value});
+  if(d.ok){ say('登录成功，正在进入邮箱…', true); location.href='mail.html'; } else say(d.error||'登录失败');
+};
+document.getElementById('regBtn').onclick = async ()=>{
+  const d = await api('/api/register', {username: username.value, password: password.value, invite: document.getElementById('invite').value});
+  if(d.ok){ say('注册成功，邮箱是 '+d.email+'，正在进入邮箱…', true); location.href='mail.html'; } else say(d.error||'注册失败');
+};
+</script></body></html>
